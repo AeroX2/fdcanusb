@@ -69,7 +69,7 @@ This queries the value of one specific configuration item.
 
 #### *conf set*
 
-This sets the value of one specific configuration itme.
+This sets the value of one specific configuration item.
 
 ```
 >conf set sample.value 1234
@@ -145,11 +145,21 @@ Just like `std` or `ext`, but auto-detect the ID type.
 
 #### *can status*
 
-Report the current mode and status of various flags.
+Report current CAN error and protocol status counters.
 
 ```
 >can status
-<mode:BUSON
+<lec=7 dlec=0 err=0 warn=0 busoff=0 pexc=0 tdc=13
+<OK
+```
+
+#### *can config*
+
+Report the currently programmed nominal and data-phase timing values.
+
+```
+>can config
+<clk=85000000 np=7 nsjw=6 nts1=7 nts2=2 dp=2 dsjw=1 dts1=5 dts2=1
 <OK
 ```
 
@@ -166,14 +176,13 @@ A CAN frame has been received.
 <rcv <HEXID> <HEXDATA> <flags>
 ```
 
-`flags` may be zero of more of the following separated by spaces:
+`flags` may be zero or more of the following separated by spaces:
 
 1. *E/e* frame was received with extended/classic ID
 1. *B/b* frame was received with/without bitrate switching
 2. *F/f* frame was received in fdcan/classic mode
 3. *R/r* frame was remote/data frame
-4. tNNNNN timestamp of receipt measured in microseconds
-5. fNN integer ID of which filter matched this frame
+4. `xNN` filter match information (`-1` when not available)
 
 ### Configurable Values
 
@@ -186,7 +195,7 @@ The following items may be configured.
 * *can.sample_point* - The sample point for the nominal part of the
   CAN frame.  moteus requires 0.666, some other systems default to
   0.75, 0.8, or 0.87.
-* *can.fd_sample_sample* - The sample point for the data (BRS) part of
+* *can.fd_sample_point* - The sample point for the data (BRS) part of
   the CAN frame.  moteus requires 0.666, other systems may require
   alternate settings.
 * *can.automatic_retransmission* - When true/non-zero, frames will be
@@ -253,3 +262,6 @@ To flash:
 ```
 ./flash.py
 ```
+
+On Windows, ensure both `arm-none-eabi-objcopy` and `openocd` are available
+on `PATH` before invoking `flash.py`.
