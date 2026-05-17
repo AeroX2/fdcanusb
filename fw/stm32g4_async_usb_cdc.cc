@@ -395,6 +395,7 @@ class Stm32G4AsyncUsbCdc::Impl {
 
   Impl(const Options& options) : options_(options) {
     g_impl = this;
+    last_cdc_activity_us_ = options_.timer->read_us();
 
     usbd_init(&udev_, &usbd_hw, CDC_EP0_SIZE, ubuf_, sizeof(ubuf_));
     usbd_reg_config(&udev_, &Impl::g_cdc_setconf);
@@ -415,6 +416,10 @@ class Stm32G4AsyncUsbCdc::Impl {
   }
 
   bool IsCdcActive() const {
+    if (cdc_port_open_) {
+      return true;
+    }
+
     const uint32_t now_us = options_.timer->read_us();
     const uint32_t elapsed_us = now_us - last_cdc_activity_us_;
     constexpr uint32_t kActivityTimeoutUs = 1000000;
@@ -479,6 +484,8 @@ class Stm32G4AsyncUsbCdc::Impl {
         usbd_ep_deconfig(&udev_, CDC_RXD_EP);
         usbd_reg_endpoint(&udev_, CDC_RXD_EP, 0);
         usbd_reg_endpoint(&udev_, CDC_TXD_EP, 0);
+        tx_idle_ = true;
+        cdc_port_open_ = false;
 
         usbd_ep_deconfig(&udev_, GSUSB_RXD_EP);
         usbd_ep_deconfig(&udev_, GSUSB_TXD_EP);
@@ -492,6 +499,7 @@ class Stm32G4AsyncUsbCdc::Impl {
         usbd_ep_config(&udev_, CDC_NTF_EP, USB_EPTYPE_INTERRUPT, CDC_NTF_SZ);
         usbd_reg_endpoint(&udev_, CDC_RXD_EP, g_cdc_rxonly);
         usbd_reg_endpoint(&udev_, CDC_TXD_EP, g_cdc_txonly);
+        tx_idle_ = false;
         usbd_ep_write(&udev_, CDC_TXD_EP, 0, 0);
 
         // configure gs_usb endpoints
@@ -522,13 +530,17 @@ class Stm32G4AsyncUsbCdc::Impl {
         req->wIndex == 1 ) {
       switch (req->bRequest) {
         case USB_CDC_SET_CONTROL_LINE_STATE:
+          cdc_port_open_ = (req->wValue & 0x0001) != 0;
+          last_cdc_activity_us_ = options_.timer->read_us();
           return usbd_ack;
         case USB_CDC_SET_LINE_CODING:
           memcpy( req->data, &cdc_line_, sizeof(cdc_line_));
+          last_cdc_activity_us_ = options_.timer->read_us();
           return usbd_ack;
         case USB_CDC_GET_LINE_CODING:
           udev_.status.data_ptr = &cdc_line_;
           udev_.status.data_count = sizeof(cdc_line_);
+          last_cdc_activity_us_ = options_.timer->read_us();
           return usbd_ack;
         default:
           return usbd_fail;
@@ -593,6 +605,8 @@ class Stm32G4AsyncUsbCdc::Impl {
   }
 
   void cdc_rxonly(uint8_t event, uint8_t ep) {
+    last_cdc_activity_us_ = options_.timer->read_us();
+
     // We always want to read the full amount from the endpoint.
     const auto bytes_to_read = std::min<int>(CDC_DATA_SZ, sizeof(fifo_) - fpos_);
     const auto actual = usbd_ep_read(&udev_, ep, &fifo_[fpos_], bytes_to_read);
@@ -693,6 +707,7 @@ private:
 
   Buffer buffer_;
   bool tx_idle_ = true;
+  bool cdc_port_open_ = false;
 
   micro::SizeCallback current_read_callback_;
   mjlib::base::string_span current_read_data_;
