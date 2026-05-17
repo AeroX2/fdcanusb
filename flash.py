@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import argparse
+import os
 import platform
 import subprocess
 import sys
@@ -37,15 +38,20 @@ def main():
 
     tmpdir = tempfile.TemporaryDirectory()
 
+    out_bin = os.path.join(tmpdir.name, 'out.bin')
     subprocess.check_call(
-        f'{OBJCOPY} -Obinary {args.elffile} {tmpdir.name}/out.bin',
+        f'{OBJCOPY} -Obinary "{args.elffile}" "{out_bin}"',
         shell=True)
+
+    # OpenOCD parses backslashes as escapes in command strings on
+    # Windows, so normalize paths to forward slashes.
+    out_bin_openocd = out_bin.replace('\\', '/')
     subprocess.check_call(
         f'{OPENOCD} -c "init" ' +
         f'-c "reset_config none separate; ' +
         f' halt; ' +
         (f' stm32l4x mass_erase 0; ' if args.erase else '') +
-        f' program {tmpdir.name}/out.bin verify 0x8000000 verify ' +
+        f' program {out_bin_openocd} verify 0x8000000 verify ' +
         f' reset exit 0x8000000"',
         shell=True)
 
